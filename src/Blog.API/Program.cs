@@ -1,12 +1,32 @@
+using Blog.Api.Services;
+using Blog.API;
+using Blog.API.Filters;
+using Blog.API.Services;
+using Blog.Core.ConfigOptions;
 using Blog.Core.Domain.Identity;
+using Blog.Core.Models.Content;
+using Blog.Core.Repositories;
+using Blog.Core.SeedWorks;
 using Blog.Data;
+using Blog.Data.Repositories;
+using Blog.Data.SeedWorks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Swashbuckle.AspNetCore.SwaggerGen;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 var connectionString = configuration.GetConnectionString("DefaultConnection");
-// Add services to the container.
+var CorsPolicy = "CorsPolicy";
+
+builder.Services.AddCors(o => o.AddPolicy(CorsPolicy, builder =>
+{
+    builder.AllowAnyMethod()
+        .AllowAnyHeader()
+        .WithOrigins(configuration["AllowedOrigins"])
+        .AllowCredentials();
+}));
 
 //config db context and ASP.NET Core Identity
 builder.Services.AddDbContext<BlogContext>(options =>
@@ -35,12 +55,56 @@ builder.Services.Configure<IdentityOptions>(options =>
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
     options.User.RequireUniqueEmail = false;
 });
+// Add services to the container.
+builder.Services.AddScoped(typeof(IRepository<,>), typeof(RepositoryBase<,>));
+builder.Services.AddScoped<IUnitOfWork,UnitOfWork>();
+//Bussiness services and repositories
+//builder.Services.AddScoped<IPostRepository, PostRepository>();
+//Thay bi add tung scope thi lay tat ca cac repository nam cung PostRepository add vao nhu ben duoi, kha giong auto fetch
+//Start
+var services = typeof(PostRepository).Assembly.GetTypes()
+    .Where(x => x.GetInterfaces().Any(i => i.Name == typeof(IRepository<,>).Name)
+    && !x.IsAbstract && x.IsClass && !x.IsGenericType);
+
+foreach (var service in services)
+{
+    var allInterfaces = service.GetInterfaces();
+    var directInterface = allInterfaces.Except(allInterfaces.SelectMany(t => t.GetInterfaces())).FirstOrDefault();
+    if (directInterface != null)
+    {
+        builder.Services.Add(new ServiceDescriptor(directInterface, service, ServiceLifetime.Scoped));
+    }
+}
+//End
+
+//Authen and author
+builder.Services.Configure<JwtTokenSettings>(configuration.GetSection("JwtTokenSettings"));
+builder.Services.AddScoped<SignInManager<AppUser>, SignInManager<AppUser>>();
+builder.Services.AddScoped<UserManager<AppUser>, UserManager<AppUser>>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<RoleManager<AppRole>, RoleManager<AppRole>>();
+
+//Auto mapper
+builder.Services.AddAutoMapper(typeof(PostInListDto));
 
 //Default config for ASP.NET Core
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.CustomOperationIds(apiDesc =>
+    {
+        return apiDesc.TryGetMethodInfo(out MethodInfo methodInfo) ? methodInfo.Name : null;
+    });
+    c.SwaggerDoc("AdminAPI", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Version = "v1",
+        Title = "API for Administrators",
+        Description = "API for CMS core domain. This domain keeps track of campaigns, campaign rules, and campaign execution."
+    });
+    c.ParameterFilter<SwaggerNullableParameterFilter>();
+});
 
 var app = builder.Build();
 
@@ -48,8 +112,15 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("AdminAPI/swagger.json", "Admin API");
+        c.DisplayOperationId();
+        c.DisplayRequestDuration();
+    });
 }
+
+app.UseCors("CorsPolicy");
 
 app.UseHttpsRedirection();
 
@@ -57,4 +128,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+//Seeding data
+app.MigrationDatabase();
 app.Run();
