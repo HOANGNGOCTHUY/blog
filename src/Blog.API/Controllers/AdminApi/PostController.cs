@@ -1,10 +1,9 @@
 ﻿using AutoMapper;
-using Blog.Core.Models.Content;
-using Blog.Core.Models;
-using Blog.Core.SeedWorks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Blog.Core.Domain.Content;
+using Blog.Core.Models;
+using Blog.Core.Models.Content;
+using Blog.Core.SeedWorks;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.API.Controllers.AdminApi
 {
