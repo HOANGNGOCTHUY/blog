@@ -18,7 +18,7 @@ import { Title } from '@angular/platform-browser';
   <router-outlet></router-outlet>`,
 })
 export class AppComponent implements OnInit {
-  title = 'Tedu Blog Admin UI';
+  title = 'Blog Admin UI';
 
   constructor(
     private router: Router,
